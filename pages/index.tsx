@@ -62,8 +62,6 @@ type RenderingContext = {
   gl: WebGLRenderingContext;
   program: WebGLProgram;
 
-  resolutionUniformLocation: WebGLUniformLocation;
-
   positionAttributeLocation: number;
   positionBuffer: WebGLBuffer;
 
@@ -86,24 +84,16 @@ function setupCanvas(canvas: HTMLCanvasElement): RenderingContext {
     throw new Error(`Failed to allocate position buffer`);
   }
 
-  const resolutionUniformLocation = gl.getUniformLocation(
-    program,
-    "u_resolution"
-  );
-  if (!resolutionUniformLocation) {
-    throw new Error(`Failed to get uniform location`);
-  }
-
   const maxTs = trace.root.interval.end;
   let positions = [];
   for (let i = 0; i < rows.length; i++) {
     const row = rows[i];
     for (const span of row) {
       const { start, end } = span.interval;
-      const startPx = (start / maxTs) * canvas.width;
-      const endPx = (end / maxTs) * canvas.width;
-      const rowStartPx = (i / rows.length) * canvas.height;
-      const rowEndPx = ((i + 0.9) / rows.length) * canvas.height;
+      const startPx = start / maxTs;
+      const endPx = end / maxTs;
+      const rowStartPx = i / rows.length;
+      const rowEndPx = (i + 0.9) / rows.length;
       const rect = [
         startPx,
         rowStartPx,
@@ -130,7 +120,6 @@ function setupCanvas(canvas: HTMLCanvasElement): RenderingContext {
     gl,
     program,
     positionAttributeLocation,
-    resolutionUniformLocation,
     positionBuffer,
     numVertexes: positions.length,
   };
@@ -150,8 +139,6 @@ function render(ctx: RenderingContext) {
   gl.clearColor(0, 0, 0, 0);
   gl.clear(gl.COLOR_BUFFER_BIT);
   gl.useProgram(program);
-
-  gl.uniform2f(ctx.resolutionUniformLocation, canvas.width, canvas.height);
 
   gl.enableVertexAttribArray(ctx.positionAttributeLocation);
   gl.bindBuffer(gl.ARRAY_BUFFER, ctx.positionBuffer);
@@ -208,11 +195,9 @@ const Home: NextPage = () => {
 
 const vertexShaderSource = `
 attribute vec2 a_position;
-uniform vec2 u_resolution;
 
 void main() {
-  vec2 zeroToOne = a_position / u_resolution;
-  vec2 clipSpace = zeroToOne * 2.0 - 1.0;
+  vec2 clipSpace = a_position * 2.0 - 1.0;
   gl_Position = vec4(clipSpace * vec2(1, -1), 0, 1);
 }
 `;
