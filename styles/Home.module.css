@@ -41,9 +41,14 @@
 }
 
 .minimap {
-  height: 100px;
+  height: 200px;
   border-bottom: 2px solid black;
   overflow: hidden;
+}
+
+.minimap canvas {
+  width: 100%;
+  height: 200px;
 }
 
 .spans {

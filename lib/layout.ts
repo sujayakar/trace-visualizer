@@ -126,6 +126,11 @@ export function computeLayout(trace: Trace): Span[][] {
     }
   }
 
+  const firstRow = rows.shift();
+  if (!firstRow || firstRow.length !== 1 || firstRow[0] !== trace.root) {
+    throw new Error(`Couldn't remove trace root in first row`);
+  }
+
   // Sanity check that all spans within a row are non-overlapping.
   for (const row of rows) {
     let ts = -1;
