@@ -86,9 +86,14 @@ function setupCanvas(canvas: HTMLCanvasElement): RenderingContext {
 
   const maxTs = trace.root.interval.end;
   let positions = [];
+  let spansProcessed = 0;
+  let totalSpans = 0;
+  rows.forEach((row) => (totalSpans += row.length));
   for (let i = 0; i < rows.length; i++) {
     const row = rows[i];
     for (const span of row) {
+      const colorBucket = Math.floor((spansProcessed * 255) / totalSpans);
+
       const { start, end } = span.interval;
       const startPx = start / maxTs;
       const endPx = end / maxTs;
@@ -97,18 +102,25 @@ function setupCanvas(canvas: HTMLCanvasElement): RenderingContext {
       const rect = [
         startPx,
         rowStartPx,
+        colorBucket,
         endPx,
         rowStartPx,
+        colorBucket,
         startPx,
         rowEndPx,
+        colorBucket,
         startPx,
         rowEndPx,
+        colorBucket,
         endPx,
         rowStartPx,
+        colorBucket,
         endPx,
         rowEndPx,
+        colorBucket,
       ];
       positions.push(...rect);
+      spansProcessed += 1;
     }
   }
   gl.bindBuffer(gl.ARRAY_BUFFER, positionBuffer);
@@ -144,7 +156,7 @@ function render(ctx: RenderingContext) {
   gl.bindBuffer(gl.ARRAY_BUFFER, ctx.positionBuffer);
   gl.vertexAttribPointer(
     ctx.positionAttributeLocation,
-    2, // 2 components per iteration
+    3, // 3 components per iteration
     gl.FLOAT, // 32 bit floats
     false, // don't normalize (?) the data
     0, // stride?
@@ -162,6 +174,7 @@ function TraceVisualizer() {
       return;
     }
     const ctx = setupCanvas(canvas);
+    // TODO: Unmount cleanly.
     requestAnimationFrame((time) => render(ctx));
   }, []);
   return (
@@ -175,12 +188,6 @@ function TraceVisualizer() {
 }
 
 const Home: NextPage = () => {
-  const loader = new EventLoader();
-  for (const event of exampleData) {
-    loader.addEvent(event);
-  }
-  const trace = loader.finalize();
-  const rows = computeLayout(trace);
   return (
     <div className={styles.application}>
       <Head>
@@ -188,26 +195,57 @@ const Home: NextPage = () => {
       </Head>
       <Toolbar />
       <TraceVisualizer />
-      {/* <DebugLayout rows={rows} /> */}
     </div>
   );
 };
 
 const vertexShaderSource = `
-attribute vec2 a_position;
+attribute vec3 a_position;
+varying float v_bucket;
 
 void main() {
-  vec2 clipSpace = a_position * 2.0 - 1.0;
+  vec2 clipSpace = a_position.xy * 2.0 - 1.0;  
   gl_Position = vec4(clipSpace * vec2(1, -1), 0, 1);
+  v_bucket = a_position.z;
 }
 `;
 
 const fragmentShaderSource = `
 precision mediump float;
+varying float v_bucket;
 
-void main() {
-  gl_FragColor = vec4(1, 0, 0.5, 1);
+vec3 hcl2rgb(float H, float C, float L) {
+  float hPrime = H / 60.0;
+  float X = C * (1.0 - abs(mod(hPrime, 2.0) - 1.0));
+  vec3 RGB =
+    hPrime < 1.0 ? vec3(C, X, 0) :
+    hPrime < 2.0 ? vec3(X, C, 0) :
+    hPrime < 3.0 ? vec3(0, C, X) :
+    hPrime < 4.0 ? vec3(0, X, C) :
+    hPrime < 5.0 ? vec3(X, 0, C) :
+    vec3(C, 0, X);
+
+  float m = L - dot(RGB, vec3(0.30, 0.59, 0.11));
+  return RGB + vec3(m, m, m);
+}
+
+float triangle(float x) {
+  return 2.0 * abs(fract(x) - 0.5) - 1.0;
+}
+
+vec3 colorForBucket(float t) {
+  float x = triangle(30.0 * t);
+  float H = 64.0 * t * (sin(t) + 1.0);
+  float C = 0.25 + 0.2 * x;
+  float L = 0.8 - 0.15 * x;
+  return hcl2rgb(H, C, L);
+}
+
+void main() {  
+  gl_FragColor = vec4(colorForBucket(v_bucket), 1);
 }
 `;
 
 export default Home;
+
+// https://webglfundamentals.org/webgl/lessons/webgl-resizing-the-canvas.html
